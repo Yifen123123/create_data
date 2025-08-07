@@ -1,54 +1,43 @@
+# txt_to_json_multi_cases.py
 import json
 
-def parse_blocks(lines: list):
-    blocks = []
-    current = {}
-    key_order = ["入院診斷", "出院診斷", "主訴", "病史"]
-    current_key = None
-    buffer = []
-    key_idx = 0
+def parse_txt_to_multi_json(txt_path: str, json_path: str):
+    with open(txt_path, 'r', encoding='utf-8') as f:
+        content = f.read()
 
-    for line in lines + ["==="]:
-        line = line.strip()
-        if line in key_order:
-            if current_key and buffer:
-                current[current_key] = "\n".join(buffer)
-                buffer = []
-            current_key = line
-            key_idx += 1
+    # 依據 "===" 分隔多段病歷
+    cases_raw = content.split("===")
+    result = []
 
-        elif line == "-":
+    for idx, block in enumerate(cases_raw):
+        lines = [line.strip() for line in block.strip().splitlines() if line.strip()]
+        if not lines:
             continue
-        elif line == "===":
-            if current_key and buffer:
-                current[current_key] = "\n".join(buffer)
-                buffer = []
 
-            if len(current) == 4:
-                blocks.append(current)
-            current = {}
-            current_key = None
-            key_idx = 0
+        case = {}
+        current_key = None
+        for line in lines:
+            # 辨認標題行
+            if line in ["入院診斷", "出院診斷", "主訴", "病史"]:
+                current_key = line
+                case[current_key] = ""
+            elif current_key:
+                clean_line = line.lstrip("-").strip()
+                if case[current_key]:
+                    case[current_key] += "\n" + clean_line
+                else:
+                    case[current_key] = clean_line
+
+        if len(case) == 4:  # 確保四個欄位都有才收錄
+            result.append(case)
         else:
-            content = line[2:] if line.startswith("- ") else line
-            buffer.append(content)
+            print(f"⚠️ 第 {idx+1} 組病歷不完整，略過：{case.keys()}")
 
-    return blocks
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
 
-def convert_txt_to_single_json(input_txt_path: str, output_json_path: str):
-    with open(input_txt_path, 'r', encoding='utf-8') as f:
-        lines = [line for line in f if line.strip()]
+    print(f"✅ 轉換完成，共儲存 {len(result)} 組病歷至 {json_path}")
 
-    blocks = parse_blocks(lines)
-
-    with open(output_json_path, 'w', encoding='utf-8') as f:
-        json.dump(blocks, f, ensure_ascii=False, indent=2)
-
-    print(f"✅ 已轉換成單一 JSON 檔案：{output_json_path}")
-    print(f"✔️ 共轉換 {len(blocks)} 筆資料")
-
+# 範例執行
 if __name__ == "__main__":
-    convert_txt_to_single_json(
-        input_txt_path='generated_text/all_cases.txt',
-        output_json_path='generated_text/all_cases.json'
-    )
+    parse_txt_to_multi_json("data/all.txt", "data/all.json")
